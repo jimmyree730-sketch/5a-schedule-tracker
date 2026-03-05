@@ -452,6 +452,8 @@
                         const arrivalMin = timeToMinutes(todayEntry.arrivalTime);
                         if (currentMinutes >= arrivalMin) { // 유예 없음, 정각부터 즉시
                             return "NOT_ARRIVED";
+                        } else {
+                            return "PRE_ARRIVAL"; // 등원시간 전: 비활성 회색
                         }
                     }
                 }
@@ -542,6 +544,7 @@
             else if (status === "IDLE" || status === "RETURNED") bgClass = "bg-emerald-600 border-emerald-500 text-white shadow-md";
             // [NEW] 등원시간 관련 상태
             else if (status === "NOT_ARRIVED") bgClass = "bg-amber-900/80 border-2 border-amber-500 text-amber-100 shadow-lg animate-pulse";
+            else if (status === "PRE_ARRIVAL") bgClass = "bg-slate-800/50 border-slate-700/50 text-slate-500 opacity-50";
             else if (status === "ABSENT") bgClass = "bg-slate-700/70 border-dashed border-slate-500 text-slate-400 opacity-60";
 
             const showFire = status.startsWith("I_");
