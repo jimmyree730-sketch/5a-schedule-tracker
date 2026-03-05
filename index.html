@@ -120,7 +120,7 @@
         // [1] SUPABASE CONFIGURATION
         // ==========================================
         const SUPABASE_URL = 'https://pingkpmsnbqpudphipke.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdWJhc2ViYXNlLm9yZyIsInJlZiI6InBpbmdrcG1zbmJxcHVkcGhpcGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NDczOTMsImV4cCI6MjA4ODIyMzM5M30.S8I76NezOFMoKxWjo4qWIeq4bt95PalHQDyrosDOLUs';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBpbmdrcG1zbmJxcHVkcGhpcGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NDczOTMsImV4cCI6MjA4ODIyMzM5M30.S8I76NezOFMoKxWjo4qWIeq4bt95PalHQDyrosDOLUs';
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         const toDbRow = (s) => ({
             seat_id: s.seatId, raw_name: s.rawName || '', schedules: s.schedules || [],
