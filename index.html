@@ -10,6 +10,7 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@500;600;800&display=swap');
@@ -116,9 +117,22 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, useCallback } = React;
         // ==========================================
-        // [1] LOCAL STORAGE CONSTANTS
+        // [1] SUPABASE CONFIGURATION
         // ==========================================
-        const STORAGE_KEY = '5A_TRACKER_DATA_LOCAL_V1';
+        const SUPABASE_URL = 'https://pingkpmsnbqpudphipke.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdWJhc2ViYXNlLm9yZyIsInJlZiI6InBpbmdrcG1zbmJxcHVkcGhpcGtlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI2NDczOTMsImV4cCI6MjA4ODIyMzM5M30.S8I76NezOFMoKxWjo4qWIeq4bt95PalHQDyrosDOLUs';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const toDbRow = (s) => ({
+            seat_id: s.seatId, raw_name: s.rawName || '', schedules: s.schedules || [],
+            memo: s.memo || '', issue_memo: s.issueMemo || '', link_url: s.linkUrl || '',
+            next_payment_date: s.nextPaymentDate || null, is_manual_off: s.isManualOff || false,
+            is_returned_today: s.isReturnedToday || false, is_dismissed_today: s.isDismissedToday || false,
+            memo_icons: s.memoIcons || []
+        });
+        const bulkSave = async (students) => {
+            const { error } = await supabase.from('tracker_seats').upsert(students.map(toDbRow), { onConflict: 'seat_id' });
+            if (error) console.error('Supabase bulk save error:', error);
+        };
         // ==========================================
         // [2] Global Logic (HOISTED)
         // ==========================================
@@ -774,24 +788,27 @@
             // ==========================================
             // [4] LOCAL STORAGE INIT & SYNC
             // ==========================================
-            const fetchData = () => {
+            const fetchData = async () => {
                 setLoading(true);
                 try {
-                    const saved = localStorage.getItem(STORAGE_KEY);
-                    if (saved) {
-                        setStudents(JSON.parse(saved));
-                    } else {
-                        // Initialize 200 seats
-                        const initialData = Array.from({ length: 200 }, (_, i) => ({
-                            seatId: i + 1, rawName: "", schedules: [], memo: "", issueMemo: "",
-                            linkUrl: "", nextPaymentDate: null, isManualOff: false,
-                            isReturnedToday: false, isDismissedToday: false, memoIcons: []
-                        }));
-                        setStudents(initialData);
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify(initialData));
-                    }
+                    const { data, error } = await supabase
+                        .from('tracker_seats')
+                        .select('*')
+                        .order('seat_id');
+                    if (error) throw error;
+                    const mapped = data.map(row => ({
+                        seatId: row.seat_id, rawName: row.raw_name || '',
+                        schedules: row.schedules || [], memo: row.memo || '',
+                        issueMemo: row.issue_memo || '', linkUrl: row.link_url || '',
+                        nextPaymentDate: row.next_payment_date || null,
+                        isManualOff: row.is_manual_off || false,
+                        isReturnedToday: row.is_returned_today || false,
+                        isDismissedToday: row.is_dismissed_today || false,
+                        memoIcons: row.memo_icons || []
+                    }));
+                    setStudents(mapped);
                 } catch (e) {
-                    console.error("Local Storage Error:", e);
+                    console.error('Supabase fetch error:', e);
                 } finally {
                     setLoading(false);
                 }
@@ -805,7 +822,13 @@
                 }, 1000);
                 return () => { clearInterval(timer); clearInterval(sync); };
             }, [selectedSeat]);
-            useEffect(() => { fetchData(); }, []);
+            useEffect(() => {
+                fetchData();
+                const channel = supabase.channel('tracker_realtime')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'tracker_seats' }, fetchData)
+                    .subscribe();
+                return () => supabase.removeChannel(channel);
+            }, []);
 
             // Auto-scroll Logic
             useEffect(() => {
@@ -827,11 +850,11 @@
                     }
                 }
 
-                setStudents(prev => {
-                    const newData = prev.map(s => s.seatId === seatId ? { ...s, ...updates } : s);
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(newData));
-                     return newData;
-                });
+                const target = students.find(s => s.seatId === seatId) || {};
+                const merged = { ...target, ...updates };
+                setStudents(prev => prev.map(s => s.seatId === seatId ? merged : s));
+                const { error } = await supabase.from('tracker_seats').upsert(toDbRow(merged), { onConflict: 'seat_id' });
+                if (error) console.error('Supabase updateDB error:', error);
             };
 
             const handleBulkRestore = async (data, type) => {
@@ -916,7 +939,7 @@
                     }
                     
                     setStudents(newStudents);
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(newStudents));
+                    await bulkSave(newStudents);
                     alert(`✅ 총 ${successCount}건의 데이터가 복구되었습니다.`);
                 } catch (e) {
                     console.error(e);
@@ -961,7 +984,7 @@
                        }
                    }
                    setStudents(newStudents);
-                   localStorage.setItem(STORAGE_KEY, JSON.stringify(newStudents));
+                   await bulkSave(newStudents);
                 } finally { setLoading(false); }
             };
             const handleBatchDelete = async () => {
@@ -978,7 +1001,7 @@
                         }
                     }
                     setStudents(newStudents);
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(newStudents));
+                    await bulkSave(newStudents);
                     setSelectedSeats([]);
                 }
             };
@@ -993,7 +1016,7 @@
                         isDismissedToday: false 
                     }));
                     setStudents(newStudents);
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(newStudents));
+                    await bulkSave(newStudents);
                 } catch (e) { console.warn("Daily reset error", e);
                 }
                 setIsSettingsOpen(false);
@@ -1005,7 +1028,7 @@
                     isReturnedToday: false, isDismissedToday: false, memoIcons: []
                 }));
                 setStudents(initialData);
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(initialData));
+                await bulkSave(initialData);
                 alert("✅ 전체 데이터가 안전하게 초기화되었습니다.");
                 setIsSettingsOpen(false);
             };
