@@ -340,24 +340,31 @@
         // ==========================================
         // [2-1] Arrival Schedule Parser
         // ==========================================
-        // 지원 포맷: "월 17:30 / 수 X / 금 결석" (X 또는 결석 키워드로 결석 명시)
+        // 지원 포맷:
+        //   단일: "월 17:30 / 화 18:00 / 수 X / 금 결석"
+        //   연속: "월화수목금토 08:10 / 일 X"
         const parseArrivalSchedule = (text) => {
             if (!text || !text.trim()) return [];
             const result = [];
             const normalize = (t) => t.replace(/[;.]/g, ':');
-            // 결석 패턴: 요일 + X/x/결석
-            const absentPattern = /([월화수목금토일])\s*[:：]?\s*(?:X|x|결석)/g;
+            // [1단계] 결석 패턴: 연속요일 + X/x/결석
+            const absentPattern = /([월화수목금토일]+)\s*[:：]?\s*(?:X|x|결석)/g;
             let m;
             while ((m = absentPattern.exec(text)) !== null) {
-                result.push({ day: m[1], arrivalTime: null, isAbsent: true });
+                m[1].split('').forEach(day => {
+                    if (!result.find(r => r.day === day))
+                        result.push({ day, arrivalTime: null, isAbsent: true });
+                });
             }
-            // 등원시간 패턴: 요일 + 시간 (결석 패턴과 겹치지 않게 처리)
-            const timePattern = /([월화수목금토일])\s*[:：]?\s*(\d{1,2}[:;.]\d{2})/g;
+            // [2단계] 등원시간 패턴: 연속요일 + 시간
+            const timePattern = /([월화수목금토일]+)\s*[:：]?\s*(\d{1,2}[:;.]\d{2})/g;
             while ((m = timePattern.exec(text)) !== null) {
-                // 이미 결석으로 등록된 요일은 건너뜀
-                if (!result.find(r => r.day === m[1])) {
-                    result.push({ day: m[1], arrivalTime: normalize(m[2]), isAbsent: false });
-                }
+                const arrivalTime = normalize(m[2]);
+                m[1].split('').forEach(day => {
+                    // 이미 결석으로 등록된 요일은 건너뜀
+                    if (!result.find(r => r.day === day))
+                        result.push({ day, arrivalTime, isAbsent: false });
+                });
             }
             return result;
         };
