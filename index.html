@@ -450,8 +450,7 @@
                     const isExempt = !!issueStatus || regularStatus === 'R_OUT' || !!student.isArrivedToday;
                     if (!isExempt) {
                         const arrivalMin = timeToMinutes(todayEntry.arrivalTime);
-                        const graceMin = arrivalMin + 15; // 유예 15분
-                        if (currentMinutes >= graceMin) {
+                        if (currentMinutes >= arrivalMin) { // 유예 없음, 정각부터 즉시
                             return "NOT_ARRIVED";
                         }
                     }
