@@ -1,0 +1,8 @@
+# 백업 및 임시 파일
+*.txt
+*.bak
+
+# OS 파일
+Thumbs.db
+.DS_Store
+desktop.ini
