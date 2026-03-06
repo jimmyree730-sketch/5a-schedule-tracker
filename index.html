@@ -545,7 +545,7 @@
             // [NEW] 등원시간 관련 상태
             else if (status === "NOT_ARRIVED") bgClass = "bg-amber-900/80 border-2 border-amber-500 text-amber-100 shadow-lg animate-pulse";
             else if (status === "PRE_ARRIVAL") bgClass = "bg-slate-600 border-slate-500 text-slate-300 shadow-md";
-            else if (status === "ABSENT") bgClass = "bg-slate-700/70 border-dashed border-slate-500 text-slate-400 opacity-60";
+            else if (status === "ABSENT") bgClass = "bg-violet-950/60 border-dashed border-violet-500 text-violet-200";
 
             const showFire = status.startsWith("I_");
             return (
@@ -595,7 +595,7 @@
                 'SCHEDULED': 'text-orange-400 bg-orange-400/15 border-orange-400',
                 'DISMISSED': 'text-purple-500 bg-purple-500/10 border-purple-500',
                 'NOT ARRIVED': 'text-amber-400 bg-amber-400/15 border-amber-400',   // [NEW]
-                'ABSENT': 'text-slate-500 bg-slate-500/10 border-slate-500'          // [NEW]
+                'ABSENT': 'text-violet-400 bg-violet-400/15 border-violet-500'        // [NEW]
             };
             const theme = themes[title] || 'text-slate-500 bg-slate-500/10 border-slate-500';
 
@@ -1344,7 +1344,8 @@
                             <div className="flex items-center gap-10 font-bold">
                                 <div className="flex flex-col">
                                     <div className="flex items-end font-black tracking-tighter uppercase font-mono leading-none">
-                                        <span className="text-white text-2xl">SCHEDULE</span>
+                                        <span className="text-white text-2xl">5A</span>
+                                        <span className="text-white text-xl ml-1.5">SCHEDULE</span>
                                         <span className="text-red-600 text-xl ml-1.5">TRACKER</span>
                                         <span className="text-[10px] text-cyan-400 ml-3 mb-0.5 font-bold">ver.1.0 LITE</span>
                                     </div>
