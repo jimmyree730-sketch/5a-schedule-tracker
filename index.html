@@ -284,12 +284,11 @@
                 body: JSON.stringify({ full_name: name })
             }).catch(e => console.warn('[timer] syncName failed', e));
         };
-        // Reset a cleared seat in timer (restore default name, remove active flags)
+        // Reset a cleared seat in timer via RPC (full cleanup: students, seats, sessions, messages)
         const timerResetSeat = (seatId) => {
-            const defaultPw = String(seatId).padStart(3, '0');
-            return fetch(`${_T_URL}/students?student_no=eq.${seatId}`, {
-                method: 'PATCH', headers: _TH,
-                body: JSON.stringify({ full_name: `학생 ${seatId}`, current_status: 'absent', has_active_ticket: false, password_hash: defaultPw, is_password_changed: false })
+            return fetch(`${_T_URL}/rpc/admin_evict_student`, {
+                method: 'POST', headers: _TH,
+                body: JSON.stringify({ p_student_no: parseInt(seatId) })
             }).catch(e => console.warn('[timer] resetSeat failed', e));
         };
         // Full resync: push all tracker names to timer (Q3)
