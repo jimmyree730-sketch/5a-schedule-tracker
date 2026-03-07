@@ -1432,10 +1432,8 @@
 
                         <main className="flex-1 p-4 overflow-y-auto bg-slate-950 custom-scrollbar">
                             <div className="grid grid-cols-5 md:grid-cols-8 lg:grid-cols-10 gap-2 pb-20">
-                                {students.map(s => (
-                                    (!isHideEmpty || s.rawName) && (
-                                        <StudentCard key={s.seatId} id={`seat-${s.seatId}`} student={s} now={now} onClick={() => handleSeatClick(s.seatId)} isSelected={selectedSeats.includes(s.seatId)} isHighlighted={searchQuery.length > 0 && s.rawName && s.rawName.toLowerCase().includes(searchQuery.toLowerCase())} isTimerActive={activeSeatIds.includes(s.seatId)} />
-                                    )
+                                {(isHideEmpty ? students.filter(s => s.rawName && s.rawName.trim()) : students).map(s => (
+                                    <StudentCard key={s.seatId} id={`seat-${s.seatId}`} student={s} now={now} onClick={() => handleSeatClick(s.seatId)} isSelected={selectedSeats.includes(s.seatId)} isHighlighted={searchQuery.length > 0 && s.rawName && s.rawName.toLowerCase().includes(searchQuery.toLowerCase())} isTimerActive={activeSeatIds.includes(s.seatId)} />
                                 ))}
                             </div>
                         </main>
