@@ -286,9 +286,10 @@
         };
         // Reset a cleared seat in timer (restore default name, remove active flags)
         const timerResetSeat = (seatId) => {
+            const defaultPw = String(seatId).padStart(3, '0');
             return fetch(`${_T_URL}/students?student_no=eq.${seatId}`, {
                 method: 'PATCH', headers: _TH,
-                body: JSON.stringify({ full_name: `학생 ${seatId}`, current_status: 'absent', has_active_ticket: false })
+                body: JSON.stringify({ full_name: `학생 ${seatId}`, current_status: 'absent', has_active_ticket: false, password_hash: defaultPw, is_password_changed: false })
             }).catch(e => console.warn('[timer] resetSeat failed', e));
         };
         // Full resync: push all tracker names to timer (Q3)
@@ -303,13 +304,15 @@
         // Fetch seat IDs where timer is currently running
         const timerFetchActive = async () => {
             try {
-                const res = await fetch(`${_T_URL}/seats?study_started_at=not.is.null&select=seat_id`, {
+                const res = await fetch(`${_T_URL}/seats?study_started_at=not.is.null&select=seat_id,status`, {
                     headers: { 'apikey': _T_KEY, 'Authorization': `Bearer ${_T_KEY}` }
                 });
-                if (!res.ok) return [];
+                if (!res.ok) return {};
                 const data = await res.json();
-                return data.map(r => parseInt(r.seat_id)).filter(Boolean);
-            } catch { return []; }
+                const map = {};
+                data.forEach(r => { const id = parseInt(r.seat_id); if (id) map[id] = r.status || '학습중'; });
+                return map;
+            } catch { return {}; }
         };
         // ==========================================
         // [2] Global Logic (HOISTED)
@@ -561,7 +564,7 @@
             return <span dangerouslySetInnerHTML={{ __html: svgHtml }} className="inline-flex items-center" />;
         }
 
-        const StudentCard = ({ student, now, onClick, isSelected, isHighlighted, isTimerActive }) => {
+        const StudentCard = ({ student, now, onClick, isSelected, isHighlighted, timerStatus }) => {
             const status = calculateStatus(student, now);
             const payStatus = getPaymentStatus(student.nextPaymentDate, now);
             const displayTime = useMemo(() => getDisplaySchedule(student, now), [student, now]);
@@ -601,7 +604,7 @@
                         </div>
                     </div>
                     <div className="absolute top-1 right-1 flex gap-0.5 z-30 items-center">
-                        {isTimerActive && <span className="text-[10px] leading-none">⏱</span>}
+                        {timerStatus && <span className={`text-[10px] leading-none ${timerStatus === '외출중' ? 'text-red-400' : 'text-cyan-400'}`}>⏱</span>}
                         {payStatus === 'OVERDUE' && <div className="w-2.5 h-2.5 rounded-full animate-blink-red"></div>}
                         {payStatus === 'SOON' && <div className="w-2.5 h-2.5 rounded-full animate-blink-yellow"></div>}
                         {memoIcons.includes('CIRCLE') && <div className="w-1.5 h-1.5 rounded-full bg-red-500 shadow-[0_0_4px_#ef4444]"></div>}
@@ -1017,6 +1020,9 @@
                                 <button onClick={() => { if (window.confirm("⚠️ 경고: 모든 좌석의 데이터가 완전히 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.\n\n정말로 전체 데이터를 초기화하시겠습니까?")) onFactoryReset(); }} className="w-full bg-slate-900 border-2 border-red-800/50 hover:bg-red-950/50 text-red-500 hover:text-red-400 text-[12px] font-black p-4 rounded-xl flex items-center justify-center gap-3 transition-all shadow-lg mt-2 group">
                                     <Icon name="trash-2" size={18} className="group-hover:animate-bounce" /> ⚠️ 전체 데이터 초기화 (Factory Reset)
                                 </button>
+                                <button onClick={() => { sessionStorage.removeItem('tracker_auth'); location.reload(); }} className="w-full bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-400 hover:text-white text-[12px] font-bold p-3 rounded-xl flex items-center justify-center gap-2 transition-all mt-2">
+                                    <Icon name="log-out" size={16} /> 로그아웃
+                                </button>
                             </div>
                             <div className="space-y-3 pt-4 border-t border-slate-800">
                                 <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Icon name="lock" size={14} /> 비밀번호 변경</h3>
@@ -1070,7 +1076,42 @@
             );
         };
 
+        // ==========================================
+        // [AUTH] Admin Login Gate
+        // ==========================================
+        const ADMIN_ID = 'inspann';
+        const ADMIN_PW = 'dnagkgk*885a';
+        const LoginScreen = ({ onLogin }) => {
+            const [uid, setUid] = useState('');
+            const [pw, setPw] = useState('');
+            const [err, setErr] = useState('');
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (uid === ADMIN_ID && pw === ADMIN_PW) {
+                    sessionStorage.setItem('tracker_auth', Date.now().toString());
+                    onLogin();
+                } else { setErr('아이디 또는 비밀번호가 올바르지 않습니다.'); }
+            };
+            return (
+                <div className="h-screen flex items-center justify-center bg-slate-950 text-slate-200">
+                    <form onSubmit={handleSubmit} className="bg-slate-900 border border-slate-800 rounded-2xl p-10 w-[360px] shadow-2xl flex flex-col items-center gap-5">
+                        <div className="flex items-end font-black tracking-tighter uppercase font-mono leading-none">
+                            <span className="text-white text-2xl">5A</span>
+                            <span className="text-white text-xl ml-1.5">SCHEDULE</span>
+                            <span className="text-red-600 text-xl ml-1.5">TRACKER</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 tracking-wide uppercase font-mono">Admin Authentication Required</p>
+                        <input type="text" placeholder="관리자 아이디" value={uid} onChange={e => setUid(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-500 placeholder-slate-500" autoFocus />
+                        <input type="password" placeholder="비밀번호" value={pw} onChange={e => setPw(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-500 placeholder-slate-500" />
+                        {err && <p className="text-red-400 text-[11px] font-bold">{err}</p>}
+                        <button type="submit" className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-black py-2.5 rounded-lg transition-colors text-sm uppercase tracking-wider">로그인</button>
+                    </form>
+                </div>
+            );
+        };
+
         const App = () => {
+            const [isAuthed, setIsAuthed] = useState(() => !!sessionStorage.getItem('tracker_auth'));
             const [students, setStudents] = useState([]);
             const [loading, setLoading] = useState(true);
             const [now, setNow] = useState(new Date());
@@ -1082,7 +1123,7 @@
             const [isHideEmpty, setIsHideEmpty] = useState(false);
             const [isAssignOpen, setIsAssignOpen] = useState(false);
             const [history, setHistory] = useState([]);
-            const [activeSeatIds, setActiveSeatIds] = useState([]);
+            const [timerSeatMap, setTimerSeatMap] = useState({});
             // ==========================================
             // [4] LOCAL STORAGE INIT & SYNC
             // ==========================================
@@ -1110,6 +1151,7 @@
                 } catch (e) {
                     console.error('Supabase fetch error:', e);
                 } finally {
+                    timerFetchActive().then(m => setTimerSeatMap(m));
                     setLoading(false);
                 }
             };
@@ -1131,8 +1173,8 @@
             }, []);
             // Timer active-seat polling (30s interval)
             useEffect(() => {
-                timerFetchActive().then(ids => setActiveSeatIds(ids));
-                const poll = setInterval(() => timerFetchActive().then(ids => setActiveSeatIds(ids)), 30000);
+                timerFetchActive().then(m => setTimerSeatMap(m));
+                const poll = setInterval(() => timerFetchActive().then(m => setTimerSeatMap(m)), 30000);
                 return () => clearInterval(poll);
             }, []);
 
@@ -1390,6 +1432,7 @@
                 else if (selectedSeats.length > 0) setSelectedSeats(p => [...p, id]);
                 else setSelectedSeat(id);
             };
+            if (!isAuthed) return <LoginScreen onLogin={() => setIsAuthed(true)} />;
             return (
                 <div className="h-screen flex bg-slate-950 text-slate-200 select-none overflow-hidden fade-in text-xs font-bold">
                     <div className="flex-1 flex flex-col overflow-hidden relative border-r border-slate-800/30 shadow-2xl">
@@ -1433,7 +1476,7 @@
                         <main className="flex-1 p-4 overflow-y-auto bg-slate-950 custom-scrollbar">
                             <div className="grid grid-cols-5 md:grid-cols-8 lg:grid-cols-10 gap-2 pb-20">
                                 {(isHideEmpty ? students.filter(s => s.rawName && s.rawName.trim()) : students).map(s => (
-                                    <StudentCard key={s.seatId} id={`seat-${s.seatId}`} student={s} now={now} onClick={() => handleSeatClick(s.seatId)} isSelected={selectedSeats.includes(s.seatId)} isHighlighted={searchQuery.length > 0 && s.rawName && s.rawName.toLowerCase().includes(searchQuery.toLowerCase())} isTimerActive={activeSeatIds.includes(s.seatId)} />
+                                    <StudentCard key={s.seatId} id={`seat-${s.seatId}`} student={s} now={now} onClick={() => handleSeatClick(s.seatId)} isSelected={selectedSeats.includes(s.seatId)} isHighlighted={searchQuery.length > 0 && s.rawName && s.rawName.toLowerCase().includes(searchQuery.toLowerCase())} timerStatus={timerSeatMap[s.seatId] || null} />
                                 ))}
                             </div>
                         </main>
