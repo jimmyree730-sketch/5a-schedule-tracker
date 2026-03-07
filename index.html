@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>5A TRACKER LIVE - Local Independent</title>
+    <title>5A SCHEDULE TRACKER</title>
 
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
@@ -485,8 +485,10 @@
 
                 if (todayEntry) {
                     if (todayEntry.isAbsent) {
-                        // 명시적 결석일: ABSENT 반환
-                        return "ABSENT";
+                        if (!student.isArrivedToday) {
+                            return "ABSENT";
+                        }
+                        // isArrivedToday=true → 등원처리됨: 정상 스케줄 로직으로 fall through
                     }
                     // 등원시간 설정된 날: 미등원 체크
                     // 면제 조건: 이슈상태 있음(I_GOING_SOON) OR R_OUT OR 이미 등원확인
