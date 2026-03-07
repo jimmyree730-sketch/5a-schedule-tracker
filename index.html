@@ -271,6 +271,47 @@
             if (error) console.error('Supabase bulk save error:', error);
         };
         // ==========================================
+        // [1-3] TIMER SYNC — 5a_timer Supabase helpers
+        // ==========================================
+        const _T_URL = 'https://dkvhasinjnfcodalbild.supabase.co/rest/v1';
+        const _T_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRrdmhhc2luam5mY29kYWxiaWxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMjU4OTcsImV4cCI6MjA4NDgwMTg5N30.9b-HOICVFXY34DdbLIq-6Ou34uYz1lxrCYoWtaqLJPY';
+        const _TH = { 'apikey': _T_KEY, 'Authorization': `Bearer ${_T_KEY}`, 'Content-Type': 'application/json' };
+        // Sync a single seat's name to timer's students table
+        const timerSyncName = (seatId, name) => {
+            if (!name) return timerResetSeat(seatId);
+            return fetch(`${_T_URL}/students?student_no=eq.${seatId}`, {
+                method: 'PATCH', headers: _TH,
+                body: JSON.stringify({ full_name: name })
+            }).catch(e => console.warn('[timer] syncName failed', e));
+        };
+        // Reset a cleared seat in timer (restore default name, remove active flags)
+        const timerResetSeat = (seatId) => {
+            return fetch(`${_T_URL}/students?student_no=eq.${seatId}`, {
+                method: 'PATCH', headers: _TH,
+                body: JSON.stringify({ full_name: `학생 ${seatId}`, current_status: 'absent', has_active_ticket: false })
+            }).catch(e => console.warn('[timer] resetSeat failed', e));
+        };
+        // Full resync: push all tracker names to timer (Q3)
+        const timerFullResync = (students) => {
+            const rows = students.map(s => ({ student_no: s.seatId, full_name: s.rawName || `학생 ${s.seatId}` }));
+            return fetch(`${_T_URL}/students?on_conflict=student_no`, {
+                method: 'POST',
+                headers: { ..._TH, 'Prefer': 'resolution=merge-duplicates' },
+                body: JSON.stringify(rows)
+            }).catch(e => console.warn('[timer] fullResync failed', e));
+        };
+        // Fetch seat IDs where timer is currently running
+        const timerFetchActive = async () => {
+            try {
+                const res = await fetch(`${_T_URL}/seats?study_started_at=not.is.null&select=seat_id`, {
+                    headers: { 'apikey': _T_KEY, 'Authorization': `Bearer ${_T_KEY}` }
+                });
+                if (!res.ok) return [];
+                const data = await res.json();
+                return data.map(r => parseInt(r.seat_id)).filter(Boolean);
+            } catch { return []; }
+        };
+        // ==========================================
         // [2] Global Logic (HOISTED)
         // ==========================================
         const formatUrl = (url) => {
@@ -520,7 +561,7 @@
             return <span dangerouslySetInnerHTML={{ __html: svgHtml }} className="inline-flex items-center" />;
         }
 
-        const StudentCard = ({ student, now, onClick, isSelected, isHighlighted }) => {
+        const StudentCard = ({ student, now, onClick, isSelected, isHighlighted, isTimerActive }) => {
             const status = calculateStatus(student, now);
             const payStatus = getPaymentStatus(student.nextPaymentDate, now);
             const displayTime = useMemo(() => getDisplaySchedule(student, now), [student, now]);
@@ -560,6 +601,7 @@
                         </div>
                     </div>
                     <div className="absolute top-1 right-1 flex gap-0.5 z-30 items-center">
+                        {isTimerActive && <span className="text-[10px] leading-none">⏱</span>}
                         {payStatus === 'OVERDUE' && <div className="w-2.5 h-2.5 rounded-full animate-blink-red"></div>}
                         {payStatus === 'SOON' && <div className="w-2.5 h-2.5 rounded-full animate-blink-yellow"></div>}
                         {memoIcons.includes('CIRCLE') && <div className="w-1.5 h-1.5 rounded-full bg-red-500 shadow-[0_0_4px_#ef4444]"></div>}
@@ -964,7 +1006,7 @@
                                     <button onClick={() => handleExport('ISSUE')} className="btn-action-flat bg-orange-500/80 h-10 text-[11px] font-bold rounded-lg text-white">🔥 이슈 내보내기 (TXT)</button>
                                     <button onClick={() => triggerFile('ISSUE')} className="btn-action-flat bg-orange-400/50 h-10 text-[11px] font-bold rounded-lg text-white">📥 이슈 복구 (TXT)</button>
                                 </div>
-                                <button className="btn-action-flat bg-teal-600/80 w-full h-10 font-bold rounded-lg text-white mt-1 shadow-lg">☁️ 마이그레이션</button>
+                                <button onClick={() => { timerFullResync(students).then(() => alert('✅ 타이머 동기화 완료')).catch(() => alert('❌ 타이머 동기화 실패')); }} className="btn-action-flat bg-teal-600/80 w-full h-10 font-bold rounded-lg text-white mt-1 shadow-lg">⏱ 타이머 전체 동기화 (Q3)</button>
                             </div>
                             <div className="space-y-3 pt-4 border-t border-slate-800">
                                 <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Icon name="terminal" size={14} /> 시스템 제어</h3>
@@ -1040,6 +1082,7 @@
             const [isHideEmpty, setIsHideEmpty] = useState(false);
             const [isAssignOpen, setIsAssignOpen] = useState(false);
             const [history, setHistory] = useState([]);
+            const [activeSeatIds, setActiveSeatIds] = useState([]);
             // ==========================================
             // [4] LOCAL STORAGE INIT & SYNC
             // ==========================================
@@ -1086,6 +1129,12 @@
                     .subscribe();
                 return () => supabase.removeChannel(channel);
             }, []);
+            // Timer active-seat polling (30s interval)
+            useEffect(() => {
+                timerFetchActive().then(ids => setActiveSeatIds(ids));
+                const poll = setInterval(() => timerFetchActive().then(ids => setActiveSeatIds(ids)), 30000);
+                return () => clearInterval(poll);
+            }, []);
 
             // Auto-scroll Logic
             useEffect(() => {
@@ -1112,6 +1161,7 @@
                 setStudents(prev => prev.map(s => s.seatId === seatId ? merged : s));
                 const { error } = await supabase.from('tracker_seats').upsert(toDbRow(merged), { onConflict: 'seat_id' });
                 if (error) console.error('Supabase updateDB error:', error);
+                if ('rawName' in updates) timerSyncName(seatId, merged.rawName);
             };
 
             const handleBulkRestore = async (data, type) => {
@@ -1197,6 +1247,7 @@
 
                     setStudents(newStudents);
                     await bulkSave(newStudents);
+                    timerFullResync(newStudents);
                     alert(`✅ 총 ${successCount}건의 데이터가 복구되었습니다.`);
                 } catch (e) {
                     console.error(e);
@@ -1242,6 +1293,7 @@
                     }
                     setStudents(newStudents);
                     await bulkSave(newStudents);
+                    timerFullResync(newStudents);
                 } finally { setLoading(false); }
             };
             const handleBatchDelete = async () => {
@@ -1259,6 +1311,7 @@
                     }
                     setStudents(newStudents);
                     await bulkSave(newStudents);
+                    for (const sid of selectedSeats) timerResetSeat(sid);
                     setSelectedSeats([]);
                 }
             };
@@ -1359,6 +1412,7 @@
                                 </div>
                             </div>
                             <div className="flex items-center gap-1.5">
+                                <button onClick={() => window.open('https://5a-timer.vercel.app/', '_blank')} className="header-action-btn bg-violet-600 text-white hover:bg-violet-500 shadow-lg border-transparent">⏱ TIMER</button>
                                 <button onClick={() => setIsAssignOpen(true)} className="header-action-btn bg-blue-600 text-white hover:bg-blue-500 shadow-lg border-transparent">좌석 배정</button>
                                 <button onClick={() => setIsHideEmpty(!isHideEmpty)} className={`header-action-btn ${isHideEmpty ? 'bg-orange-500 border-orange-400 text-white' : 'bg-orange-600 border-transparent text-white hover:bg-orange-500'}`}>좌석 숨김</button>
                                 <button onClick={fetchData} className="header-action-btn bg-cyan-600 text-white hover:bg-cyan-500 shadow-lg border-transparent">새로고침</button>
@@ -1380,7 +1434,7 @@
                             <div className="grid grid-cols-5 md:grid-cols-8 lg:grid-cols-10 gap-2 pb-20">
                                 {students.map(s => (
                                     (!isHideEmpty || s.rawName) && (
-                                        <StudentCard key={s.seatId} id={`seat-${s.seatId}`} student={s} now={now} onClick={() => handleSeatClick(s.seatId)} isSelected={selectedSeats.includes(s.seatId)} isHighlighted={searchQuery.length > 0 && s.rawName && s.rawName.toLowerCase().includes(searchQuery.toLowerCase())} />
+                                        <StudentCard key={s.seatId} id={`seat-${s.seatId}`} student={s} now={now} onClick={() => handleSeatClick(s.seatId)} isSelected={selectedSeats.includes(s.seatId)} isHighlighted={searchQuery.length > 0 && s.rawName && s.rawName.toLowerCase().includes(searchQuery.toLowerCase())} isTimerActive={activeSeatIds.includes(s.seatId)} />
                                     )
                                 ))}
                             </div>
